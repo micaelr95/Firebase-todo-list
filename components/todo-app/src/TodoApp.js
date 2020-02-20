@@ -1,16 +1,26 @@
 import { LitElement, html, css } from 'lit-element';
-import { classMap } from 'lit-html/directives/class-map.js';
-import { openWcLogo } from './open-wc-logo.js';
+import firebase from "firebase/app";
+import "firebase/firestore";
+import { TodoList } from './TodoList';
 
-import '../../page-main/page-main.js';
-import '../../page-one/page-one.js';
-import { templateAbout } from './templateAbout.js';
+const firebaseConfig = {
+  apiKey: "AIzaSyCyfVP7ZQ4DtxEAMUVGoeHq6hWs_tBe0Es",
+  authDomain: "todo-app-7a2a7.firebaseapp.com",
+  databaseURL: "https://todo-app-7a2a7.firebaseio.com",
+  projectId: "todo-app-7a2a7",
+  storageBucket: "todo-app-7a2a7.appspot.com",
+  messagingSenderId: "1048136573768",
+  appId: "1:1048136573768:web:aa7df2091751cb0f19497d"
+};
+
+// Initialize Firebase
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
 
 export class TodoApp extends LitElement {
   static get properties() {
     return {
-      title: { type: String },
-      page: { type: String },
+      todos: { type: Array },
     };
   }
 
@@ -75,34 +85,35 @@ export class TodoApp extends LitElement {
 
   constructor() {
     super();
-    this.page = 'main';
+
+    this.todos = [];
+
+    db.collection('todos').get()
+      .then(snapshot => {
+        snapshot.forEach(doc => {
+          this.todos = [
+            ...this.todos,
+            doc.data()
+          ];
+        });
+      })
+      .catch(err => {
+        console.log('Error getting documents', err);
+      });
+
   }
 
   render() {
     return html`
-      <header>
-        <ul>
-          <li>
-            <a href="#main" class=${this.__navClass('main')} @click=${this.__onNavClicked}>
-              Main
-            </a>
-          </li>
-          <li>
-            <a href="#pageOne" class=${this.__navClass('pageOne')} @click=${this.__onNavClicked}>
-              Page One
-            </a>
-          </li>
-          <li>
-            <a href="#about" class=${this.__navClass('about')} @click=${this.__onNavClicked}>
-              About
-            </a>
-          </li>
-        </ul>
-      </header>
+      <h1>Todo App</h1>
 
-      <main>
-        ${this._renderPage()}
-      </main>
+      <input type="text" id="addTodoInput" placeholder="Name" />
+      <button @click="${this._addTodo}">Add</button>
+
+      <todo-list
+        .todos=${this.todos}
+        @change-todo-finished="${this._changeTodoFinished}"
+        @remove-todo="${this._removeTodo}"></todo-list>
 
       <p class="app-footer">
         🚽 Made with love by
@@ -111,31 +122,43 @@ export class TodoApp extends LitElement {
     `;
   }
 
-  _renderPage() {
-    switch (this.page) {
-      case 'main':
-        return html`
-          <page-main .logo=${openWcLogo}></page-main>
-        `;
-      case 'pageOne':
-        return html`
-          <page-one></page-one>
-        `;
-      case 'about':
-        return templateAbout;
-      default:
-        return html`
-          <p>Page not found try going to <a href="#main">Main</a></p>
-        `;
-    }
+  _addTodo() {
+    const input = this.shadowRoot.getElementById('addTodoInput');
+    const text = input.value;
+    input.value = '';
+
+    const docref = db.collection('todos').doc(text);
+
+    docref.set({
+      text,
+      finished: false,
+    });
+
+    this.todos = [
+      ...this.todos,
+      { text, finished: false }
+    ];
   }
 
-  __onNavClicked(ev) {
-    ev.preventDefault();
-    this.page = ev.target.hash.substring(1);
+  _changeTodoFinished(e) {
+    const { text } = e.detail.changeTodo;
+    const { finished } = e.detail;
+
+    const docref = db.collection('todos').doc(text);
+
+    docref.update({ finished });
+
+    this.todos = this.todos.map(todo => {
+      if(todo !== text) {
+        return todo
+      }
+
+      return { ...text, finished }
+    });
   }
 
-  __navClass(page) {
-    return classMap({ active: this.page === page });
+  _removeTodo(e) {
+    db.collection('todos').doc(e.detail.text).delete();
+    this.todos = this.todos.filter(todo => todo !== e.detail);
   }
 }
